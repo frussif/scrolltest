@@ -11,6 +11,7 @@ A browser‑based tool to measure and visualize your mouse scroll wheel consiste
   - **Red** = intervals < 10ms
   - **Orange** = intervals > 30ms
   - **Black** = consistent intervals
+- **Strike‑through**: any interval that occurs in the *opposite scroll direction* from the session’s majority is shown with a line through it, making accidental direction changes easy to spot.
 
 ## 🎯 Why use this?
 Shows the interval between each step, useful for **BHOP/KZ** (bunnyhopping / Kreedz climbing), where consistent scroll intervals are key.
@@ -19,9 +20,9 @@ Shows the interval between each step, useful for **BHOP/KZ** (bunnyhopping / Kre
 Mice with **optical scroll wheel encoders** are generally more accurate than those with **mechanical, rotary encoders**.  
 
 ## 🚀 Live Demo
-Curious about your own mouse?
+Curious about your own mouse?  
 Check it out here:  
 👉 [Scroll Tracker Demo](https://frussif.github.io/scrolltest/)
 
 ## 🛠️ Development
-This project is pure HTML, CSS, and JavaScript.  
+This project is pure HTML, CSS, and JavaScript.
