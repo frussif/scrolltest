@@ -27,8 +27,6 @@
     canvas {
       border: 1px solid #ccc;
     }
-
-    /* Interval history box (added) */
     #intervalHistory {
       margin-top: 20px;
       padding: 10px;
@@ -46,10 +44,10 @@
       margin-bottom: 8px;
     }
     #historyContent {
-      max-height: 10.5em; /* ~10 lines depending on font metrics */
+      max-height: 10.5em; /* ~10 lines */
       overflow-y: auto;
-      white-space: pre-line; /* allow \n to render as line breaks */
-      line-height: 1.2em;
+      white-space: pre-line;
+      line-height: 1.3em;
     }
     #resetBtn {
       margin-top: 10px;
@@ -67,7 +65,6 @@
     <canvas id="scrollChart" width="600" height="300"></canvas>
   </div>
 
-  <!-- Added: Plain-number interval history with scroll, newest on top, and reset -->
   <div id="intervalHistory">
     <h3>Interval history</h3>
     <div id="historyContent">No results yet...</div>
@@ -81,7 +78,7 @@
         this.trackingActive = false;
         this.initListeners();
         this.initGraph();
-        this.initReset(); // added
+        this.initReset();
       }
 
       reset() {
@@ -89,9 +86,11 @@
         this.startTime = null;
         this.lastScrollTime = null;
         this.scrollTimes = [];
+        this.scrollIntervals = [];
+        this.scrollDirections = []; // "up" or "down" per event
+        this.majorityDirection = null; // decided per session in analyze
         this.trackingActive = false;
         this.inconsistentScrolls = 0;
-        this.scrollIntervals = [];
       }
 
       initListeners() {
@@ -99,24 +98,22 @@
       }
 
       initReset() {
-        const resetBtn = document.getElementById("resetBtn");
-        resetBtn.addEventListener("click", () => {
-          const historyDiv = document.getElementById("historyContent");
-          historyDiv.innerHTML = "No results yet...";
+        document.getElementById("resetBtn").addEventListener("click", () => {
+          document.getElementById("historyContent").innerHTML = "No results yet...";
         });
       }
 
       onScroll(event) {
         const currentTime = performance.now();
+        const direction = event.deltaY > 0 ? "down" : "up";
 
         if (this.scrollTimes.length > 0) {
-          this.scrollIntervals.push(
-            currentTime - this.scrollTimes[this.scrollTimes.length - 1]
-          );
+          this.scrollIntervals.push(currentTime - this.scrollTimes[this.scrollTimes.length - 1]);
         }
 
         this.scrollCount++;
         this.scrollTimes.push(currentTime);
+        this.scrollDirections.push(direction);
 
         if (!this.trackingActive) {
           this.trackingActive = true;
@@ -137,22 +134,35 @@
         return 0;
       }
 
+      decideMajorityDirection() {
+        const upCount = this.scrollDirections.filter(d => d === "up").length;
+        const downCount = this.scrollDirections.filter(d => d === "down").length;
+        this.majorityDirection = upCount >= downCount ? "up" : "down";
+      }
+
+      isOppositeInterval(index) {
+        // interval i corresponds to event i+1 direction
+        const dir = this.scrollDirections[index + 1];
+        return this.majorityDirection && dir && dir !== this.majorityDirection;
+      }
+
       analyzeScrollActivity() {
         if (!this.trackingActive || performance.now() - this.lastScrollTime < 100) return;
+
+        this.decideMajorityDirection();
 
         const durationMs = (this.lastScrollTime - this.startTime).toFixed(0);
         const scrollRate = this.calculateScrollRate();
         const intervalAnalysis = this.analyzeScrollIntervals();
 
         this.updateLog(
-          `\nTotal scrolls: ${this.scrollCount} ` +
+          `\nTotal scrolls: ${this.scrollCount}` +
           `\nTotal scroll time: ${durationMs} ms` +
           `\nScroll rate: ${scrollRate} scrolls per second` +
           `\n${intervalAnalysis}` +
           `\n\nStart scrolling again to begin a new measurement.`
         );
 
-        // Added: build colored line and prepend to history (newest first)
         const historyDiv = document.getElementById("historyContent");
         const line = this.formatIntervalsLineColored();
         if (line) {
@@ -173,33 +183,47 @@
 
         const trimmedIntervals = this.scrollIntervals.slice(0, -2);
         const lastTwo = this.scrollIntervals.slice(-2);
+
         const averageInterval =
           trimmedIntervals.reduce((sum, interval) => sum + interval, 0) /
-          trimmedIntervals.length;
+          Math.max(1, trimmedIntervals.length);
 
         this.inconsistentScrolls = trimmedIntervals.filter(
           (interval) => interval < 10 || interval > 30
         ).length;
 
         const formattedIntervals = trimmedIntervals
-          .map((interval) =>
-            interval < 10 || interval > 30
-              ? `<span style="color: red;">${interval.toFixed(0)}ms</span>`
-              : `${interval.toFixed(0)}ms`
-          )
+          .map((interval, i) => {
+            const idx = i; // index within full intervals
+            const val = interval.toFixed(0) + "ms";
+            const colored =
+              interval < 10 ? `<span style="color:red;">${val}</span>` :
+              interval > 30 ? `<span style="color:orange;">${val}</span>` :
+              val;
+            return this.isOppositeInterval(idx)
+              ? `<s>${colored}</s>`
+              : colored;
+          })
           .join(", ");
 
         const lastTwoFormatted = lastTwo
-          .map((interval) =>
-            interval < 10 || interval > 30
-              ? `<span style="color: orange;">${interval.toFixed(0)}ms</span>`
-              : `${interval.toFixed(0)}ms`
-          )
+          .map((interval, i) => {
+            const idx = this.scrollIntervals.length - 2 + i;
+            const val = interval.toFixed(0) + "ms";
+            const colored =
+              interval < 10 ? `<span style="color:orange;">${val}</span>` : // keep distinct from main list
+              interval > 30 ? `<span style="color:orange;">${val}</span>` :
+              val;
+            return this.isOppositeInterval(idx)
+              ? `<s>${colored}</s>`
+              : colored;
+          })
           .join(", ");
 
         return (
-          `Scroll Intervals (ms): ${formattedIntervals}` +
+          `Scroll Time Differences (ms): ${formattedIntervals}` +
           `\nLast 2 intervals (excluded from graph): ${lastTwoFormatted}` +
+          `\nMajority direction: ${this.majorityDirection}` +
           `\nScrolls are ${
             this.inconsistentScrolls === 0
               ? "consistent"
@@ -209,20 +233,22 @@
         );
       }
 
-      // Build a single history line with color coding, no "ms", no labels; newest lines appear on top
       formatIntervalsLineColored() {
         if (this.scrollIntervals.length < 2) return "";
-        const allIntervals = this.scrollIntervals.map((i) => {
-          const val = i.toFixed(0); // no "ms"
-          if (i < 10) {
-            return `<span style="color:red;">${val}</span>`;
-          } else if (i > 25) {
-            return `<span style="color:orange;">${val}</span>`;
-          } else {
-            return val;
+
+        return this.scrollIntervals.map((interval, i) => {
+          const val = interval.toFixed(0); // plain number for history
+          let colored =
+            interval < 10 ? `<span style="color:red;">${val}</span>` :
+            interval > 25 ? `<span style="color:orange;">${val}</span>` :
+            val;
+
+          if (this.isOppositeInterval(i)) {
+            colored = `<s>${colored}</s>`;
           }
-        });
-        return allIntervals.join(", ");
+
+          return colored;
+        }).join(", ");
       }
 
       updateLog(message) {
@@ -234,54 +260,112 @@
         this.ctx = this.canvas.getContext("2d");
       }
 
-      updateGraph() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      drawStrikethroughText(text, x, y) {
+        // Draw text, then a strike line through its middle
+        this.ctx.fillText(text, x, y);
+        const metrics = this.ctx.measureText(text);
+        const textWidth = metrics.width;
+        const lineY = y - 6; // adjust to cut through text visually
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, lineY);
+        this.ctx.lineTo(x + textWidth, lineY);
+        this.ctx.stroke();
+      }
 
+      updateGraph() {
+        const ctx = this.ctx;
+        const canvas = this.canvas;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Exclude last two intervals from the graph as per your logic
         const graphData = this.scrollIntervals.slice(0, -2);
-        if (graphData.length < 2) return;
+        if (graphData.length < 2) {
+          // Still draw axes and labels to avoid "freeze" sensation
+          const padding = 40;
+          ctx.strokeStyle = "black";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(padding, padding);
+          ctx.lineTo(padding, canvas.height - padding);
+          ctx.lineTo(canvas.width - padding, canvas.height - padding);
+          ctx.stroke();
+
+          ctx.fillStyle = "black";
+          ctx.font = "14px Arial";
+          ctx.fillText("Interval Number", canvas.width / 2 - 40, canvas.height - 10);
+          ctx.fillText("Scroll Interval (ms)", 10, 20);
+          return;
+        }
 
         const maxInterval = Math.max(...graphData);
         const padding = 40;
 
         // Axes
-        this.ctx.strokeStyle = "black";
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        this.ctx.moveTo(padding, padding);
-        this.ctx.lineTo(padding, this.canvas.height - padding);
-        this.ctx.lineTo(this.canvas.width - padding, this.canvas.height - padding);
-        this.ctx.stroke();
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(padding, padding);
+        ctx.lineTo(padding, canvas.height - padding);
+        ctx.lineTo(canvas.width - padding, canvas.height - padding);
+        ctx.stroke();
 
         // Labels
-        this.ctx.fillStyle = "black";
-        this.ctx.font = "14px Arial";
-        this.ctx.fillText("Interval Number", this.canvas.width / 2 - 40, this.canvas.height - 5);
-        this.ctx.fillText("Scroll Interval (ms)", 10, 20);
+        ctx.fillStyle = "black";
+        ctx.font = "14px Arial";
+        ctx.fillText("Scroll Events", canvas.width / 2 - 40, canvas.height - 10);
+        ctx.fillText("Scroll Interval (ms)", 10, 20);
 
         // X tick labels
         graphData.forEach((_, index) => {
-          const x = padding + (index * ((this.canvas.width - padding * 2) / graphData.length));
-          this.ctx.fillText(index + 1, x - 5, this.canvas.height - padding + 15);
+          const x = padding + (index * ((canvas.width - padding * 2) / graphData.length));
+          ctx.fillText(index + 1, x - 5, canvas.height - padding + 15);
         });
 
-        // Line plot
-        this.ctx.beginPath();
-        this.ctx.strokeStyle = "blue";
-        this.ctx.lineWidth = 2;
+        // Line plot with color-coded labels and strike-through for opposite direction
+        ctx.beginPath();
+        ctx.strokeStyle = "blue";
+        ctx.lineWidth = 2;
+
         graphData.forEach((interval, index) => {
-          const x = padding + (index * ((this.canvas.width - padding * 2) / graphData.length));
-          const y = this.canvas.height - (interval / maxInterval * (this.canvas.height - padding * 2));
-          if (interval < 10) {
-            this.ctx.fillStyle = "red";
-          } else if (interval > 25) {
-            this.ctx.fillStyle = "orange";
+          const x = padding + (index * ((canvas.width - padding * 2) / graphData.length));
+          const y = canvas.height - (interval / maxInterval * (canvas.height - padding * 2));
+
+          // Move/line
+          if (index === 0) {
+            ctx.moveTo(x, y);
           } else {
-            this.ctx.fillStyle = "black";
+            ctx.lineTo(x, y);
           }
-          this.ctx.fillText(`${interval.toFixed(0)}ms`, x - 10, y - 5);
-          this.ctx.lineTo(x, y);
         });
-        this.ctx.stroke();
+        ctx.stroke();
+
+        // Draw labels after the line to ensure they are on top
+        graphData.forEach((interval, index) => {
+          const x = padding + (index * ((canvas.width - padding * 2) / graphData.length));
+          const y = canvas.height - (interval / maxInterval * (canvas.height - padding * 2));
+
+          // Color choice
+          if (interval < 10) {
+            ctx.fillStyle = "red";
+          } else if (interval > 25) {
+            ctx.fillStyle = "orange";
+          } else {
+            ctx.fillStyle = "black";
+          }
+
+          const label = `${interval.toFixed(0)}ms`;
+
+          // Strike-through if opposite direction
+          const globalIdx = index; // graphData aligns to intervals 0..len-3
+          ctx.save();
+          ctx.strokeStyle = ctx.fillStyle; // match strike color with text color
+          if (this.isOppositeInterval(globalIdx)) {
+            this.drawStrikethroughText(label, x - 12, y - 6);
+          } else {
+            ctx.fillText(label, x - 12, y - 6);
+          }
+          ctx.restore();
+        });
       }
     }
 
@@ -289,5 +373,3 @@
   </script>
 </body>
 </html>
-
-
