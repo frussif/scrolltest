@@ -221,7 +221,7 @@
           .join(", ");
 
         return (
-          `Scroll Time Differences (ms): ${formattedIntervals}` +
+          `Scroll Intervals (ms): ${formattedIntervals}` +
           `\nLast 2 intervals (excluded from graph): ${lastTwoFormatted}` +
           `\nMajority direction: ${this.majorityDirection}` +
           `\nScrolls are ${
@@ -312,7 +312,7 @@
         // Labels
         ctx.fillStyle = "black";
         ctx.font = "14px Arial";
-        ctx.fillText("Scroll Events", canvas.width / 2 - 40, canvas.height - 10);
+        ctx.fillText("Scroll Intervals", canvas.width / 2 - 40, canvas.height - 10);
         ctx.fillText("Scroll Interval (ms)", 10, 20);
 
         // X tick labels
@@ -373,3 +373,4 @@
   </script>
 </body>
 </html>
+
