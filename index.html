@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Scroll Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    #log {
+      white-space: pre-line;
+      font-family: monospace;
+      background: #f4f4f4;
+      padding: 10px;
+      border-radius: 5px;
+      max-width: 600px;
+      margin: auto;
+      text-align: left;
+    }
+    #chartContainer {
+      margin-top: 20px;
+      position: relative;
+    }
+    canvas {
+      border: 1px solid #ccc;
+    }
+
+    /* Interval history box (added) */
+    #intervalHistory {
+      margin-top: 20px;
+      padding: 10px;
+      background: #fafafa;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+      font-family: monospace;
+      text-align: left;
+    }
+    #intervalHistory h3 {
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+    #historyContent {
+      max-height: 10.5em; /* ~10 lines depending on font metrics */
+      overflow-y: auto;
+      white-space: pre-line; /* allow \n to render as line breaks */
+      line-height: 1.2em;
+    }
+    #resetBtn {
+      margin-top: 10px;
+      padding: 6px 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Scroll Tracker</h1>
+  <p>Start scrolling to track your activity!</p>
+  <div id="log">Waiting for scroll input...</div>
+  <div id="chartContainer">
+    <canvas id="scrollChart" width="600" height="300"></canvas>
+  </div>
+
+  <!-- Added: Plain-number interval history with scroll, newest on top, and reset -->
+  <div id="intervalHistory">
+    <h3>Interval history</h3>
+    <div id="historyContent">No results yet...</div>
+    <button id="resetBtn" type="button">Reset history</button>
+  </div>
+
+  <script>
+    class ScrollTracker {
+      constructor() {
+        this.reset();
+        this.trackingActive = false;
+        this.initListeners();
+        this.initGraph();
+        this.initReset(); // added
+      }
+
+      reset() {
+        this.scrollCount = 0;
+        this.startTime = null;
+        this.lastScrollTime = null;
+        this.scrollTimes = [];
+        this.trackingActive = false;
+        this.inconsistentScrolls = 0;
+        this.scrollIntervals = [];
+      }
+
+      initListeners() {
+        document.addEventListener("wheel", (event) => this.onScroll(event));
+      }
+
+      initReset() {
+        const resetBtn = document.getElementById("resetBtn");
+        resetBtn.addEventListener("click", () => {
+          const historyDiv = document.getElementById("historyContent");
+          historyDiv.innerHTML = "No results yet...";
+        });
+      }
+
+      onScroll(event) {
+        const currentTime = performance.now();
+
+        if (this.scrollTimes.length > 0) {
+          this.scrollIntervals.push(
+            currentTime - this.scrollTimes[this.scrollTimes.length - 1]
+          );
+        }
+
+        this.scrollCount++;
+        this.scrollTimes.push(currentTime);
+
+        if (!this.trackingActive) {
+          this.trackingActive = true;
+          this.startTime = currentTime;
+        }
+
+        this.lastScrollTime = currentTime;
+        this.updateLog(`Scroll detected: ${this.scrollCount} scrolls`);
+
+        setTimeout(() => this.analyzeScrollActivity(), 100);
+      }
+
+      calculateScrollRate() {
+        if (this.startTime && this.lastScrollTime) {
+          const duration = (this.lastScrollTime - this.startTime) / 1000;
+          return duration > 0 ? (this.scrollCount / duration).toFixed(2) : 0;
+        }
+        return 0;
+      }
+
+      analyzeScrollActivity() {
+        if (!this.trackingActive || performance.now() - this.lastScrollTime < 100) return;
+
+        const durationMs = (this.lastScrollTime - this.startTime).toFixed(0);
+        const scrollRate = this.calculateScrollRate();
+        const intervalAnalysis = this.analyzeScrollIntervals();
+
+        this.updateLog(
+          `\nTotal scrolls: ${this.scrollCount} ` +
+          `\nTotal scroll time: ${durationMs} ms` +
+          `\nScroll rate: ${scrollRate} scrolls per second` +
+          `\n${intervalAnalysis}` +
+          `\n\nStart scrolling again to begin a new measurement.`
+        );
+
+        // Added: build colored line and prepend to history (newest first)
+        const historyDiv = document.getElementById("historyContent");
+        const line = this.formatIntervalsLineColored();
+        if (line) {
+          if (historyDiv.innerHTML === "No results yet...") {
+            historyDiv.innerHTML = line;
+          } else {
+            historyDiv.innerHTML = line + "\n" + historyDiv.innerHTML;
+          }
+        }
+
+        this.updateGraph();
+        this.trackingActive = false;
+        this.reset();
+      }
+
+      analyzeScrollIntervals() {
+        if (this.scrollIntervals.length < 2) return "Not enough scrolls to analyze timing.";
+
+        const trimmedIntervals = this.scrollIntervals.slice(0, -2);
+        const lastTwo = this.scrollIntervals.slice(-2);
+        const averageInterval =
+          trimmedIntervals.reduce((sum, interval) => sum + interval, 0) /
+          trimmedIntervals.length;
+
+        this.inconsistentScrolls = trimmedIntervals.filter(
+          (interval) => interval < 10 || interval > 30
+        ).length;
+
+        const formattedIntervals = trimmedIntervals
+          .map((interval) =>
+            interval < 10 || interval > 30
+              ? `<span style="color: red;">${interval.toFixed(0)}ms</span>`
+              : `${interval.toFixed(0)}ms`
+          )
+          .join(", ");
+
+        const lastTwoFormatted = lastTwo
+          .map((interval) =>
+            interval < 10 || interval > 30
+              ? `<span style="color: orange;">${interval.toFixed(0)}ms</span>`
+              : `${interval.toFixed(0)}ms`
+          )
+          .join(", ");
+
+        return (
+          `Scroll Intervals (ms): ${formattedIntervals}` +
+          `\nLast 2 intervals (excluded from graph): ${lastTwoFormatted}` +
+          `\nScrolls are ${
+            this.inconsistentScrolls === 0
+              ? "consistent"
+              : "<span style='color: red;'>inconsistent</span>"
+          }` +
+          `\nAvg interval: ${averageInterval.toFixed(0)}ms`
+        );
+      }
+
+      // Build a single history line with color coding, no "ms", no labels; newest lines appear on top
+      formatIntervalsLineColored() {
+        if (this.scrollIntervals.length < 2) return "";
+        const allIntervals = this.scrollIntervals.map((i) => {
+          const val = i.toFixed(0); // no "ms"
+          if (i < 10) {
+            return `<span style="color:red;">${val}</span>`;
+          } else if (i > 25) {
+            return `<span style="color:orange;">${val}</span>`;
+          } else {
+            return val;
+          }
+        });
+        return allIntervals.join(", ");
+      }
+
+      updateLog(message) {
+        document.getElementById("log").innerHTML = message;
+      }
+
+      initGraph() {
+        this.canvas = document.getElementById("scrollChart");
+        this.ctx = this.canvas.getContext("2d");
+      }
+
+      updateGraph() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        const graphData = this.scrollIntervals.slice(0, -2);
+        if (graphData.length < 2) return;
+
+        const maxInterval = Math.max(...graphData);
+        const padding = 40;
+
+        // Axes
+        this.ctx.strokeStyle = "black";
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.moveTo(padding, padding);
+        this.ctx.lineTo(padding, this.canvas.height - padding);
+        this.ctx.lineTo(this.canvas.width - padding, this.canvas.height - padding);
+        this.ctx.stroke();
+
+        // Labels
+        this.ctx.fillStyle = "black";
+        this.ctx.font = "14px Arial";
+        this.ctx.fillText("Scroll Events", this.canvas.width / 2 - 40, this.canvas.height - 5);
+        this.ctx.fillText("Scroll Interval (ms)", 10, 20);
+
+        // X tick labels
+        graphData.forEach((_, index) => {
+          const x = padding + (index * ((this.canvas.width - padding * 2) / graphData.length));
+          this.ctx.fillText(index + 1, x - 5, this.canvas.height - padding + 15);
+        });
+
+        // Line plot
+        this.ctx.beginPath();
+        this.ctx.strokeStyle = "blue";
+        this.ctx.lineWidth = 2;
+        graphData.forEach((interval, index) => {
+          const x = padding + (index * ((this.canvas.width - padding * 2) / graphData.length));
+          const y = this.canvas.height - (interval / maxInterval * (this.canvas.height - padding * 2));
+          if (interval < 10) {
+            this.ctx.fillStyle = "red";
+          } else if (interval > 25) {
+            this.ctx.fillStyle = "orange";
+          } else {
+            this.ctx.fillStyle = "black";
+          }
+          this.ctx.fillText(`${interval.toFixed(0)}ms`, x - 10, y - 5);
+          this.ctx.lineTo(x, y);
+        });
+        this.ctx.stroke();
+      }
+    }
+
+    new ScrollTracker();
+  </script>
+</body>
+</html>
