@@ -1,4 +1,4 @@
-# 🖱️ Scroll Tracker
+# 🖱️ [Scroll Tracker](https://frussif.github.io/scrolltest/)
 
 A browser‑based tool to measure and visualize your mouse scroll wheel consistency.
 
