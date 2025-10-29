@@ -9,7 +9,7 @@ A browser‑based tool to measure and visualize your mouse scroll wheel consiste
 - Interval history log (newest results on top)
 - Color‑coded intervals:
   - **Red** = intervals < 10ms
-  - **Orange** = intervals > 25ms
+  - **Orange** = intervals > 30ms
   - **Black** = consistent intervals
 
 ## 🎯 Why use this?
